@@ -275,10 +275,89 @@ button { font-family: inherit; }
 .login-user .u-role { display: inline-block; margin-top: 6px; font-size: 11px; padding: 1px 8px; border-radius: 999px; background: #eef1f6; color: var(--ink-2); }
 .login-user .u-role.admin { background: #e8f0ff; color: var(--brand); }
 
+/* ---------- 配置档案 ---------- */
+.env-tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+.env-tab {
+  padding: 6px 18px; border-radius: 8px; border: 1px solid var(--line);
+  background: #fff; color: var(--ink-2); font-size: 13px;
+}
+.env-tab:hover { border-color: var(--brand); color: var(--brand); }
+.env-tab.active { background: var(--brand); border-color: var(--brand); color: #fff; }
+.env-tab.prod.active { background: #c02f33; border-color: #c02f33; }
+.cfg-grid { grid-template-columns: 1.6fr 1fr; }
+.cfg-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+
+.cfg-table td.v { max-width: 320px; word-break: break-all; white-space: normal; }
+.cfg-table td.k, .audit-table .mono { word-break: break-all; }
+.meta-tag {
+  display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 6px;
+  background: #eef1f6; color: var(--ink-2); white-space: nowrap;
+}
+.secret-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: #f3e8ff; color: #7c3aed; border-radius: 999px;
+  padding: 2px 10px; font-size: 12px; font-weight: 600;
+}
+.secret-masked {
+  color: #7c3aed; background: #f6f0ff; border-radius: 4px;
+  padding: 1px 7px; letter-spacing: 1px; user-select: none;
+}
+.secret-plain {
+  background: #0f1a2e; color: #7dffb0; border-radius: 8px;
+  padding: 14px 16px; font-size: 14px; word-break: break-all;
+  user-select: all; margin: 10px 0;
+}
+
+.cfg-edit-table select { width: 100%; border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; font-size: 12px; }
+.cfg-edit-table td { vertical-align: middle; }
+
+/* 版本历史 */
+.version-list { display: flex; flex-direction: column; gap: 10px; max-height: 560px; overflow-y: auto; }
+.version-item {
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: #fafbfc;
+}
+.version-item.current { border-color: var(--brand); background: #f5f8ff; }
+.ver-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ver-head b { font-size: 14px; }
+.ver-cur {
+  font-size: 11px; color: #fff; background: var(--brand);
+  border-radius: 999px; padding: 1px 8px;
+}
+.ver-meta { color: var(--ink-3); font-size: 12px; margin-left: auto; }
+.ver-note { color: var(--ink-2); font-size: 12.5px; margin: 5px 0; }
+.ver-actions { display: flex; gap: 6px; margin-top: 6px; }
+
+/* 差异对比 */
+.diff-summary { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.ds { font-size: 12px; border-radius: 999px; padding: 3px 12px; background: #eef1f6; color: var(--ink-2); }
+.ds.changed { background: #fdf3d7; color: #ad7209; }
+.ds.onlya { background: #e8f0ff; color: #2f6bff; }
+.ds.onlyb { background: #f0e9ff; color: #7c3aed; }
+.ds.same { background: #e5f8ee; color: #0f8a4c; }
+.diff-table td { vertical-align: top; white-space: normal; word-break: break-all; }
+.diff-table tr.changed td { background: #fffbeb; }
+.diff-table tr.only_a td { background: #f5f8ff; }
+.diff-table tr.only_b td { background: #faf5ff; }
+.diff-gone { color: var(--ink-3); font-size: 12px; }
+
+/* 留痕 */
+.audit-table th, .audit-table td { white-space: normal; }
+.audit-table .nowrap { white-space: nowrap; }
+.audit-val { max-width: 220px; }
+.reason-cell { max-width: 240px; color: var(--ink-2); font-size: 12.5px; }
+.action-tag {
+  display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 6px;
+  background: #eef1f6; color: var(--ink-2); white-space: nowrap;
+}
+.action-tag.add { background: #e5f8ee; color: #0f8a4c; }
+.action-tag.update, .action-tag.rollback { background: #fdf3d7; color: #ad7209; }
+.action-tag.remove { background: #fde8e8; color: #c02f33; }
+.action-tag.reveal { background: #f3e8ff; color: #7c3aed; }
+
 /* ---------- 响应式：平板 ---------- */
 @media (max-width: 900px) {
   .dash-grid { grid-template-columns: 1fr; }
-  .detail-grid { grid-template-columns: 1fr; }
+  .detail-grid, .cfg-grid { grid-template-columns: 1fr; }
   .red-groups { grid-template-columns: 1fr; }
 }
 

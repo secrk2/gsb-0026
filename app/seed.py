@@ -3,6 +3,7 @@
 部分应用故意缺失负责人或环境变量，用于控制台红点提示演示。
 变更日志时间相对启动时刻生成，保证"近 7 天有变更"开箱即有数据。
 """
+import json
 import time
 
 from .db import STATUS_LABELS, execute, query_one
@@ -91,6 +92,7 @@ def seed_if_empty() -> bool:
         )
         user_ids[username] = cur.lastrowid
 
+    app_ids: dict[str, int] = {}
     for (app_name, bl_code, owner, cluster, env, status, desc,
          env_count, days_ago) in APPS:
         created = now - days_ago * DAY - 3600
@@ -103,6 +105,7 @@ def seed_if_empty() -> bool:
              desc, created, now - days_ago * DAY),
         )
         app_id = cur.lastrowid
+        app_ids[app_name] = app_id
         for key, value in ENV_VAR_POOL[:env_count]:
             execute("INSERT INTO env_vars (app_id, key, value) VALUES (?,?,?)",
                     (app_id, key, value))
@@ -118,4 +121,178 @@ def seed_if_empty() -> bool:
                 (app_id, user_ids.get(owner) or user_ids["admin"], "状态变更",
                  f"状态流转至「{STATUS_LABELS[status]}」", now - days_ago * DAY),
             )
+
+    seed_config_profiles(app_ids, user_ids, now)
     return True
+
+
+# ---------------------------------------------------------------- 配置档案种子
+
+def _cfg(key, value, value_type="string", scope="global", is_secret=0):
+    return {"key": key, "value": value, "value_type": value_type,
+            "scope": scope, "is_secret": is_secret}
+
+
+# 每个应用的配置档案按时间顺序给出多个版本；相邻版本自动产生逐键留痕。
+# (应用名, 环境, [(操作人 username, 备注, 距今天数, [配置项...]) ...])
+CONFIG_PROFILES = [
+    ("支付网关", "prod", [
+        ("zhangwei", "支付网关生产环境初始配置", 12, [
+            _cfg("DB_HOST", "mysql-pay.prod.internal"),
+            _cfg("DB_PORT", "3306", "number"),
+            _cfg("DB_PASSWORD", "Pa$$w0rd-Init-2026", is_secret=1),
+            _cfg("REDIS_URL", "redis://redis-prod:6379/0"),
+            _cfg("REDIS_PASSWORD", "redis-init-secret", is_secret=1),
+            _cfg("MQ_BROKER", "kafka://kafka-prod:9092"),
+            _cfg("PAY_TIMEOUT_MS", "3000", "number"),
+            _cfg("ENABLE_PROFIT_SHARING", "false", "boolean"),
+            _cfg("LOG_LEVEL", "INFO"),
+        ]),
+        ("zhangwei", "缩短支付超时，关闭详细日志", 6, [
+            _cfg("DB_HOST", "mysql-pay.prod.internal"),
+            _cfg("DB_PORT", "3306", "number"),
+            _cfg("DB_PASSWORD", "Pa$$w0rd-Init-2026", is_secret=1),
+            _cfg("REDIS_URL", "redis://redis-prod:6379/0"),
+            _cfg("REDIS_PASSWORD", "redis-init-secret", is_secret=1),
+            _cfg("MQ_BROKER", "kafka://kafka-prod:9092"),
+            _cfg("PAY_TIMEOUT_MS", "2000", "number"),
+            _cfg("ENABLE_PROFIT_SHARING", "false", "boolean"),
+            _cfg("LOG_LEVEL", "WARN"),
+        ]),
+        ("lina", "开启分账灰度并轮换数据库口令", 1, [
+            _cfg("DB_HOST", "mysql-pay.prod.internal"),
+            _cfg("DB_PORT", "3306", "number"),
+            _cfg("DB_PASSWORD", "Pa$$w0rd-Rot-0918", is_secret=1),
+            _cfg("REDIS_URL", "redis://redis-prod:6379/0"),
+            _cfg("REDIS_PASSWORD", "redis-init-secret", is_secret=1),
+            _cfg("MQ_BROKER", "kafka://kafka-prod-2:9092"),
+            _cfg("PAY_TIMEOUT_MS", "2000", "number"),
+            _cfg("ENABLE_PROFIT_SHARING", "true", "boolean", "canary"),
+            _cfg("LOG_LEVEL", "WARN"),
+            _cfg("RATE_LIMIT_QPS", "500", "number"),
+        ]),
+    ]),
+    ("支付网关", "dev", [
+        ("zhangwei", "支付网关开发环境配置", 9, [
+            _cfg("DB_HOST", "mysql-pay.dev.internal"),
+            _cfg("DB_PORT", "3306", "number"),
+            _cfg("DB_PASSWORD", "dev-db-password", is_secret=1),
+            _cfg("REDIS_URL", "redis://redis-dev:6379/0"),
+            _cfg("MQ_BROKER", "kafka://kafka-dev:9092"),
+            _cfg("PAY_TIMEOUT_MS", "5000", "number"),
+            _cfg("ENABLE_PROFIT_SHARING", "true", "boolean"),
+            _cfg("LOG_LEVEL", "DEBUG"),
+            _cfg("MOCK_CHANNEL", "true", "boolean"),
+        ]),
+    ]),
+    ("会员中心", "prod", [
+        ("wangqiang", "会员中心生产环境初始配置", 8, [
+            _cfg("DB_HOST", "mysql-growth.prod.internal"),
+            _cfg("DB_PASSWORD", "member-db-secret", is_secret=1),
+            _cfg("REDIS_URL", "redis://redis-growth:6379/1"),
+            _cfg("POINT_EXPIRE_DAYS", "365", "number"),
+            _cfg("LEVEL_RULES", '{"silver":1000,"gold":10000}', "json"),
+            _cfg("LOG_LEVEL", "INFO"),
+        ]),
+        ("chenchen", "积分有效期调整为 730 天", 2, [
+            _cfg("DB_HOST", "mysql-growth.prod.internal"),
+            _cfg("DB_PASSWORD", "member-db-secret", is_secret=1),
+            _cfg("REDIS_URL", "redis://redis-growth:16379/1"),
+            _cfg("POINT_EXPIRE_DAYS", "730", "number"),
+            _cfg("LEVEL_RULES", '{"silver":1000,"gold":10000,"diamond":50000}', "json"),
+            _cfg("LOG_LEVEL", "INFO"),
+            _cfg("PUSH_ENABLED", "true", "boolean", "cluster"),
+        ]),
+    ]),
+    ("实时数仓", "prod", [
+        ("sunlei", "实时数仓生产配置", 4, [
+            _cfg("FLINK_JOBMANAGER", "flink-jm.data.internal:8081"),
+            _cfg("CHECKPOINT_INTERVAL_MS", "60000", "number"),
+            _cfg("KAFKA_SASL_PASSWORD", "flink-kafka-secret", is_secret=1),
+            _cfg("PARALLELISM", "8", "number"),
+            _cfg("LOG_LEVEL", "INFO"),
+        ]),
+    ]),
+]
+
+
+def seed_config_profiles(app_ids: dict, user_ids: dict, now: int) -> None:
+    """写入配置档案：每个版本一条快照 + 当前值表 + 逐键审计流水。"""
+    for app_name, environment, versions in CONFIG_PROFILES:
+        app_id = app_ids.get(app_name)
+        if app_id is None:
+            continue
+        prev_map: dict[str, dict] = {}
+        for idx, (username, note, days_ago, items) in enumerate(versions, start=1):
+            uid = user_ids.get(username) or user_ids["admin"]
+            ts = now - days_ago * DAY - 3600
+            execute(
+                """INSERT INTO config_versions
+                   (app_id, environment, version, snapshot, change_note, created_by, created_at)
+                   VALUES (?,?,?,?,?,?,?)""",
+                (app_id, environment, idx, json.dumps(items, ensure_ascii=False), note, uid, ts),
+            )
+            version_id = query_one(
+                "SELECT id FROM config_versions WHERE app_id=? AND environment=? AND version=?",
+                (app_id, environment, idx),
+            )["id"]
+            audit = []
+            new_map = {it["key"]: it for it in items}
+            for key in sorted(set(prev_map) | set(new_map)):
+                old, new = prev_map.get(key), new_map.get(key)
+                if old is None and new is not None:
+                    audit.append(("add", key, None, new["value"], new["is_secret"], ""))
+                elif new is None and old is not None:
+                    audit.append(("remove", key, old["value"], None, old["is_secret"], ""))
+                elif old is not None and new is not None:
+                    meta = []
+                    if old["value_type"] != new["value_type"]:
+                        meta.append(f"类型 {old['value_type']}→{new['value_type']}")
+                    if old["scope"] != new["scope"]:
+                        meta.append(f"范围 {old['scope']}→{new['scope']}")
+                    if old["is_secret"] != new["is_secret"]:
+                        meta.append("密文标记变更")
+                    audit.append(("update", key, old["value"], new["value"],
+                                  old["is_secret"] or new["is_secret"], "；".join(meta)))
+            for action, key, old_v, new_v, is_secret, reason in audit:
+                execute(
+                    """INSERT INTO config_audit_logs
+                       (app_id, environment, version_id, user_id, action, config_key,
+                        old_value, new_value, is_secret, reason, created_at)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                    (app_id, environment, version_id, uid, action, key,
+                     old_v, new_v, is_secret, reason, ts),
+                )
+            prev_map = new_map
+
+        # 当前值表落到最后一个版本
+        latest = items
+        latest_ts = ts
+        execute("DELETE FROM config_items WHERE app_id = ? AND environment = ?",
+                (app_id, environment))
+        for it in latest:
+            execute(
+                """INSERT INTO config_items
+                   (app_id, environment, key, value, value_type, scope, is_secret, updated_by, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?)""",
+                (app_id, environment, it["key"], it["value"], it["value_type"],
+                 it["scope"], it["is_secret"], uid, latest_ts),
+            )
+
+    # 一条"查看明文"留痕样例（昨天，李娜排查支付问题时申请查看库口令）
+    pay = app_ids.get("支付网关")
+    if pay:
+        pwd = query_one(
+            "SELECT id, key FROM config_items WHERE app_id=? AND environment='prod' AND is_secret=1 AND key='DB_PASSWORD'",
+            (pay,),
+        )
+        if pwd:
+            execute(
+                """INSERT INTO config_audit_logs
+                   (app_id, environment, version_id, user_id, action, config_key,
+                    old_value, new_value, is_secret, reason, created_at)
+                   VALUES (?,?,NULL,?, 'reveal', ?, NULL, NULL, 1, ?, ?)""",
+                (pay, "prod", user_ids["lina"], pwd["key"],
+                 "线上支付失败率升高，排查数据库连接鉴权问题，工单 INC-20260918-07",
+                 now - DAY),
+            )
